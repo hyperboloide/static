@@ -1,0 +1,17 @@
+language: go
+
+go:
+  - 1.7
+  - 1.8
+  - tip
+
+install:
+  - export PATH=$GOPATH/bin:$PATH
+  - go get -v -t ./...
+  - go get github.com/onsi/ginkgo/ginkgo
+  - go get github.com/onsi/gomega
+  - go get -u github.com/jteeuwen/go-bindata/...
+  - go get github.com/gin-gonic/gin
+
+
+script: cd demo && make assets && cd - &&  ginkgo -r --randomizeSuites --race --trace

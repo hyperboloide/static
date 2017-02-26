@@ -5,12 +5,12 @@ all: assets
 
 assets: clean
 	go-bindata \
-		-pkg=main \
-		-o=bindata.go \
+		-pkg=files \
+		-o=files/bindata.go \
 		-prefix="files" \
 		files/...
 
 clean:
-	rm -fr $(NAME) bindata.go
+	rm -fr $(NAME) files/bindata.go
 
 .PHONY: all assets clean
