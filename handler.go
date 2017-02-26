@@ -1,7 +1,10 @@
 package static
 
 import (
+	"bytes"
+	"compress/gzip"
 	"crypto/md5"
+	"errors"
 	"fmt"
 	"mime"
 	"net/http"
@@ -32,6 +35,7 @@ type Handler struct {
 	mimes    map[string]string
 	maxAge   uint
 	indexes  []string
+	headers  map[string]string
 }
 
 // NewHandler create a new Handler. contentFn is the Asset method
@@ -65,6 +69,49 @@ func NewHandler(contentFn ContentFunc, namesFn NamesFunc) *Handler {
 	}
 
 	return res
+}
+
+// NewGzipHandler return a handler that compress the assets. The level parameter
+// is the compression level used by gzip, see: https://golang.org/pkg/compress/gzip/#pkg-constants
+func NewGzipHandler(contentFn ContentFunc, namesFn NamesFunc, level int) (*Handler, error) {
+	comp := map[string][]byte{}
+
+	for _, name := range namesFn() {
+		content, err := contentFn(name)
+		if err != nil {
+			continue
+
+		}
+
+		var b bytes.Buffer
+		if gw, err := gzip.NewWriterLevel(&b, level); err != nil {
+			return nil, err
+
+		} else if _, err := gw.Write(content); err != nil {
+			return nil, err
+
+		} else if err := gw.Close(); err != nil {
+			return nil, err
+
+		} else {
+			comp[name] = b.Bytes()
+
+		}
+	}
+
+	gzContentFn := func(name string) ([]byte, error) {
+		b, exists := comp[name]
+		if !exists {
+			return nil, errors.New(fmt.Sprintf("asset: '%s' not found", name))
+
+		}
+		return b, nil
+	}
+	h := NewHandler(gzContentFn, namesFn)
+	h.headers = map[string]string{
+		"Content-Encoding": "gzip",
+	}
+	return h, nil
 }
 
 // AddIndexes adds possible indexes. For example if there are one or more directories
@@ -154,6 +201,15 @@ func (h *Handler) get(c *gin.Context) {
 		}
 
 		c.Writer.Header().Set("Content-Type", h.getMime(pth))
+		c.Writer.Header().Set("Content-Length", fmt.Sprintf("%d", len(b)))
+
+		if h.headers != nil && len(h.headers) > 0 {
+			for k, v := range h.headers {
+				c.Writer.Header().Set(k, v)
+
+			}
+		}
+
 		if _, err := c.Writer.Write(b); err != nil {
 			c.Status(http.StatusInternalServerError)
 
